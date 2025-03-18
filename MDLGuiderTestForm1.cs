@@ -166,10 +166,17 @@ namespace MDL_Guide_Tester
 
             //Wait a couple of seconds for MDL to get connected
             Thread.Sleep(2000);
-            //cam.GuiderAutoSelectStar = true;
+            if (AutoStarCheckBox.Checked)
+                cam.GuiderAutoSelectStar = BoolToSbyte(true);
 
             //Find Star automatically via guider exposure
             bool guiderStatus = SbyteToBool(cam.GuiderExpose(duration));
+            while (SbyteToBool(cam.GuiderRunning))
+            {
+                LogIt(".", false);
+                Thread.Sleep(1000);
+            }
+
             if (guiderStatus)
                 LogIt("Exposure Passed");
             else
@@ -185,7 +192,7 @@ namespace MDL_Guide_Tester
             }
             else
             {
-                LogIt("Guide Star Located");
+                LogIt("Guide Star Located at "+ cam.GuiderXStarPosition.ToString()+" X / "+cam.GuiderYStarPosition.ToString()+" Y");
                 LogIt("Locate Star Test Passed");
             }
         }
