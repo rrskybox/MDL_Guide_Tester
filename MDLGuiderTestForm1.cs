@@ -14,6 +14,9 @@ namespace MDL_Guide_Tester
         }
 
         public List<string> logList = new List<string>();
+        public int MainFilterNumber { get; set; } = 0;
+        public double GuiderDuration { get; set; } = 1;
+        public int GuiderBinning { get; set; } = 1;
 
         private void CalibrationTestButton_Click(object sender, EventArgs e)
         {
@@ -23,8 +26,8 @@ namespace MDL_Guide_Tester
             //This routine automates a complete guider calibration in Maxim DL, i.e. guider and AO-X
             //
 
-            double duration = (double)ExposureBox.Value; ; //Exposure length in seconds
-            int binning = GetBinning();
+            GuiderDuration = (double)ExposureBox.Value; ; //Exposure length in seconds
+            GuiderBinning = GetBinning();
 
             //Open Maxim objects -- camera and application
             MaxIm.Application app = new MaxIm.Application();
@@ -32,7 +35,7 @@ namespace MDL_Guide_Tester
             //Connect Maxim
             cam.LinkEnabled = BoolToSbyte(true);
             //Set binning
-            cam.GuiderBinning = (sbyte)binning;
+            cam.GuiderBinning = (sbyte)GuiderBinning;
             short bin = cam.GuiderBinning;
             LogIt("Binning set to: " + bin.ToString());
 
@@ -42,7 +45,7 @@ namespace MDL_Guide_Tester
             else
             {
                 //Find Star automatically via guider exposure
-                bool guiderStatus = SbyteToBool(cam.GuiderExpose(duration));
+                bool guiderStatus = SbyteToBool(cam.GuiderExpose(GuiderDuration));
                 if (guiderStatus)
                     LogIt("Exposure Passed");
                 else
@@ -62,7 +65,7 @@ namespace MDL_Guide_Tester
             }
 
             //Start the guider calibration using the same exposure length
-            bool calResult = SbyteToBool(cam.GuiderCalibrate(duration));
+            bool calResult = SbyteToBool(cam.GuiderCalibrate(GuiderDuration));
             if (DelayCheckBox.Checked)
             {
                 Thread.Sleep(2000);
@@ -142,6 +145,10 @@ namespace MDL_Guide_Tester
             else
                 LogIt("Mount connection Failed");
             LogIt("Connection Tests Passed");
+            //Read in filter names
+            List<string> filterNames = GetFilterNames();
+            foreach (string filterName in filterNames)
+                FilterListBox.Items.Add(filterName);
             return;
         }
 
@@ -178,7 +185,11 @@ namespace MDL_Guide_Tester
             }
 
             if (guiderStatus)
+            {
+                GuideStarX.Text = cam.GuiderXStarPosition.ToString();
+                GuideStarY.Text = cam.GuiderYStarPosition.ToString();
                 LogIt("Exposure Passed");
+            }
             else
             {
                 LogIt("Exposure Failed");
@@ -192,7 +203,7 @@ namespace MDL_Guide_Tester
             }
             else
             {
-                LogIt("Guide Star Located at "+ cam.GuiderXStarPosition.ToString()+" X / "+cam.GuiderYStarPosition.ToString()+" Y");
+                LogIt("Guide Star Located at " + cam.GuiderXStarPosition.ToString() + " X / " + cam.GuiderYStarPosition.ToString() + " Y");
                 LogIt("Locate Star Test Passed");
             }
         }
@@ -243,6 +254,7 @@ namespace MDL_Guide_Tester
                     LogIt("Guide State Locate Passed");
             }
 
+
             //Start the guider calibration using the same exposure length
             bool calResult = SbyteToBool(cam.GuiderRunning);
             if (DelayCheckBox.Checked)
@@ -267,6 +279,7 @@ namespace MDL_Guide_Tester
             else
                 LogIt("Awaiting on Cal Complete  ");
 
+
             //Take another reading and Wait for calibration to complete
             while (SbyteToBool(cam.GuiderRunning))
 
@@ -274,6 +287,8 @@ namespace MDL_Guide_Tester
                 LogIt(".", false);
                 Thread.Sleep(1000);
             }
+            GuideStarX.Text = cam.GuiderXStarPosition.ToString();
+            GuideStarY.Text = cam.GuiderYStarPosition.ToString();
             LogIt("");
             //Report calibration result upon completion status, either 2 for successful or 3 for unsuccessful
             LogIt("Cal done with results: " + GetCompletion(cam.GuiderCalState) + " at binning " + cam.GuiderBinning.ToString());
@@ -283,6 +298,7 @@ namespace MDL_Guide_Tester
         private void SaveLogsButton_Click(object sender, EventArgs e)
         {
             List<string> mdlLog = GetMDLLog();
+            List<string> aoxLog = GetAOXLog();
             saveFileDialog1.Filter = "Log files (*.log)|*.log";
             DialogResult saveLogResult = saveFileDialog1.ShowDialog();
             if (saveLogResult != DialogResult.OK)
@@ -290,12 +306,21 @@ namespace MDL_Guide_Tester
             //FileStream logStream = File.Open(saveFileDialog1.FileName, FileMode.OpenOrCreate);
             StreamWriter logStream = File.CreateText(saveFileDialog1.FileName);
             //Copy local log into save file
+            logStream.WriteLine("***************");
             logStream.WriteLine("MDL Guider Test Log");
+            logStream.WriteLine("***************");
             foreach (string logLine in logList)
                 logStream.WriteLine(logLine);
             //Copy MDL AO log file to it
-            logStream.WriteLine("MDL Guider AO Log");
+            logStream.WriteLine("***************");
+            logStream.WriteLine("MDL Log");
+            logStream.WriteLine("***************");
             foreach (string logLIne in mdlLog)
+                logStream.WriteLine(logLIne);
+            logStream.WriteLine("***************");
+            logStream.WriteLine("MDL Guider AO Log");
+            logStream.WriteLine("***************");
+            foreach (string logLIne in aoxLog)
                 logStream.WriteLine(logLIne);
             logStream.Close();
         }
@@ -327,6 +352,17 @@ namespace MDL_Guide_Tester
             return 0;
         }
 
+        private List<string> GetFilterNames()
+        {
+            List<string> filterNames = new List<string>();
+            MaxIm.Application app = new MaxIm.Application();
+            MaxIm.CCDCamera cam = new MaxIm.CCDCamera();
+            cam.LinkEnabled = BoolToSbyte(true);
+            foreach (string f in cam.FilterNames)
+                filterNames.Add(f);
+            return filterNames;
+        }
+
         private string GetCompletion(int calState)
         {
             switch (calState)
@@ -344,7 +380,7 @@ namespace MDL_Guide_Tester
             }
         }
 
-        private List<string> GetMDLLog()
+        private List<string> GetAOXLog()
         {
             List<string> logList = new List<string>();
 
@@ -352,6 +388,26 @@ namespace MDL_Guide_Tester
             string mdlLogFilePath = userDocumentDirectoryPath + "\\MaxIm DL 7\\Settings\\Log";
             string mdlAOXLogFilePath = mdlLogFilePath + "\\DLImagingAO";
             string currentDateLogPath = mdlAOXLogFilePath + "\\" + DateTime.Now.ToString("yyyyMMdd") + ".log";
+
+            //Try to open today's log, return null list if failed
+            StreamReader textStream;
+            try { textStream = new StreamReader(currentDateLogPath); }
+            catch { return logList; }
+
+            //Read log into list
+            while (textStream.Peek() != -1)
+                logList.Add(textStream.ReadLine());
+            textStream.Close();
+            return logList;
+        }
+
+        private List<string> GetMDLLog()
+        {
+            List<string> logList = new List<string>();
+
+            string userDocumentDirectoryPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            string mdlLogFilePath = userDocumentDirectoryPath + "\\MaxIm DL 7\\Settings\\Log";
+            string currentDateLogPath = mdlLogFilePath + "\\" + DateTime.Now.ToString("yyyyMMdd") + ".log";
 
             //Try to open today's log, return null list if failed
             StreamReader textStream;
@@ -380,5 +436,87 @@ namespace MDL_Guide_Tester
             else
                 return 0;
         }
+
+        private void FilterListBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            //set main camera filter
+            MainFilterNumber = FilterListBox.SelectedIndex;
+        }
+
+        private void MainCameraExposureButton_Click(object sender, EventArgs e)
+        {
+            LogIt("\r\n");
+            LogIt("Main Camera Exposure");
+            //
+            //This routine automates a camera exposure in Maxim DL, i.e. guider and AO-X
+            //
+
+            double duration = (double)MainCameraExposureBox.Value; ; //Exposure length in seconds
+            int cameraBinning = GetBinning();
+
+            //Open Maxim objects -- camera and application
+            MaxIm.Application app = new MaxIm.Application();
+            MaxIm.CCDCamera cam = new MaxIm.CCDCamera();
+            //Connect Maxim
+            cam.LinkEnabled = BoolToSbyte(true);
+            //Set binning
+            cam.BinX = (sbyte)cameraBinning;
+            cam.BinY = (sbyte)cameraBinning;
+            LogIt("Main Camera Binning set to: " + cam.BinX.ToString() + " / " + cam.BinY.ToString());
+            //filter
+            cam.Filter = (short)MainFilterNumber;
+            LogIt("Main Camera Filter set to: " + cam.Filter.ToString());
+            //Expose
+            bool cameraStatus = SbyteToBool(cam.Expose(duration, 1));
+            if (cameraStatus)
+                LogIt("Camera Exposure Started for " + duration.ToString() + " seconds");
+            else
+            {
+                LogIt("Camera Exposure Failed");
+                LogIt("Camera Exposusre Test Failed");
+                return;
+            }
+
+            //Take another reading and Wait for calibration to complete
+
+            while (!SbyteToBool(cam.ImageReady))
+            {
+                LogIt("Camera Status = " + cam.CameraStatus.ToString());
+                Thread.Sleep(1000);
+            }
+            //Report exposure result upon completion status, either 2 for successful or 3 for unsuccessful
+            LogIt("Main camera exposure done with results: " + cam.CameraStatus.ToString());
+        }
+
+        private void MoveStarTestButton_Click(object sender, EventArgs e)
+        {
+            LogIt("\r\n");
+            LogIt("Guider Move Start Location Test");
+            //Open Maxim objects -- camera and application
+            MaxIm.Application app = new MaxIm.Application();
+            MaxIm.CCDCamera cam = new MaxIm.CCDCamera();
+            //Connect Maxim
+            cam.LinkEnabled = BoolToSbyte(true);
+            //Get current star position
+            LogIt("Moving Guider Star location to X=" + (cam.GuiderXStarPosition + (float)DeltaXBox.Value).ToString("0.00") +
+                                                " / Y = " + (cam.GuiderYStarPosition + (float)DeltaYBox.Value).ToString("0.00"));
+            sbyte moveResult = cam.GuiderMoveStar(cam.GuiderXStarPosition + (float)DeltaXBox.Value, cam.GuiderYStarPosition + (float)DeltaYBox.Value);
+            if (SbyteToBool(moveResult))
+                LogIt("Move Star successful");
+            else
+                LogIt("Move Star failed");
+            GuideStarX.Text = cam.GuiderXStarPosition.ToString();
+            GuideStarY.Text = cam.GuiderYStarPosition.ToString();
+            return;
+        }
+
+        private void label6_Click(object sender, EventArgs e)
+        {
+            //Read in filter names
+            List<string> filterNames = GetFilterNames();
+            foreach (string filterName in filterNames)
+                FilterListBox.Items.Add(filterName);
+        }
     }
 }
+
