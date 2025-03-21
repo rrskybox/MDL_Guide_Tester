@@ -224,75 +224,73 @@ namespace MDL_Guide_Tester
             MaxIm.CCDCamera cam = new MaxIm.CCDCamera();
             //Connect Maxim
             cam.LinkEnabled = BoolToSbyte(true);
+            //Turn off guiding and exit if running
+            if (SbyteToBool(cam.GuiderRunning))
+            {
+                cam.GuiderStop();
+                LogIt("Guiding Stopped");
+                GuidingTestButton.Text = "Guider Test";
+                return;
+            }
             //Set binning
             cam.GuiderBinning = (sbyte)binning;
             short bin = cam.GuiderBinning;
             LogIt("Binning set to: " + bin.ToString());
 
-            //Find Star automatically via guider exposure
-            if (AutoStarCheckBox.Checked)
-                cam.GuiderAutoSelectStar = BoolToSbyte(true);
-            else
-            {
-                //Find Star automatically via guider exposure
-                bool guiderStatus = SbyteToBool(cam.GuiderExpose(duration));
-                if (guiderStatus)
-                    LogIt("Exposure Passed");
-                else
-                {
-                    LogIt("Exposure Failed");
-                    LogIt("Calibration Test Failed");
-                    return;
-                }
-                if (cam.GuiderXStarPosition == 0 && cam.GuiderYStarPosition == 0)
-                {
-                    LogIt("Guide Star Locate Failed");
-                    LogIt("Calibration Test Failed");
-                    return;
-                }
-                else
-                    LogIt("Guide State Locate Passed");
-            }
+            ////Find Star automatically via guider exposure
+            //if (AutoStarCheckBox.Checked)
+            //    cam.GuiderAutoSelectStar = BoolToSbyte(true);
+            //else
+            //{
+            //    //Find Star automatically via guider exposure
+            //    bool guiderStatus = SbyteToBool(cam.GuiderExpose(duration));
+            //    if (guiderStatus)
+            //        LogIt("Exposure Passed");
+            //    else
+            //    {
+            //        LogIt("Exposure Failed");
+            //        LogIt("Calibration Test Failed");
+            //        return;
+            //    }
+            //    if (cam.GuiderXStarPosition == 0 && cam.GuiderYStarPosition == 0)
+            //    {
+            //        LogIt("Guide Star Locate Failed");
+            //        LogIt("Calibration Test Failed");
+            //        return;
+            //    }
+            //    else
+            //        LogIt("Guide State Locate Passed");
+            //}
 
 
             //Start the guider calibration using the same exposure length
-            bool calResult = SbyteToBool(cam.GuiderRunning);
+            bool gStart = SbyteToBool(cam.GuiderTrack(duration));
+            bool gImmediateState = SbyteToBool(cam.GuiderRunning);
+            //Check to see if guidercalstate has been set correctly immediately after starting cal
+            if (!gImmediateState)
+                LogIt("Error -- Immediate Guider reading is: " + gImmediateState);
             if (DelayCheckBox.Checked)
             {
                 Thread.Sleep(2000);
             }
-            int calImmediateState = cam.GuiderCalState;
-
-            LogIt("Cal Start Result: " + calResult.ToString());
-            if (calResult)
-                LogIt("Cal start result = true");
+            bool gResult = SbyteToBool(cam.GuiderRunning);
+            LogIt("Guider Start Result: " + gResult.ToString());
+            if (gResult)
+                LogIt("Guider start result = true");
             else
             {
-                LogIt("Cal start result = false");
-                LogIt("Calibration Test Failed");
+                LogIt("Guider start result = false");
+                LogIt("Guider Test Failed");
                 return;
             }
 
-            //Check to see if guidercalstate has been set correctly immediately after starting cal
-            if (calImmediateState != 1)
-                LogIt("Error -- Immediate calstate reading is: " + GetCompletion(calImmediateState));
-            else
-                LogIt("Awaiting on Cal Complete  ");
 
-
-            //Take another reading and Wait for calibration to complete
-            while (SbyteToBool(cam.GuiderRunning))
-
-            {
-                LogIt(".", false);
-                Thread.Sleep(1000);
-            }
             GuideStarX.Text = cam.GuiderXStarPosition.ToString();
             GuideStarY.Text = cam.GuiderYStarPosition.ToString();
             LogIt("");
             //Report calibration result upon completion status, either 2 for successful or 3 for unsuccessful
-            LogIt("Cal done with results: " + GetCompletion(cam.GuiderCalState) + " at binning " + cam.GuiderBinning.ToString());
-
+            //LogIt("Cal done with results: " + GetCompletion(cam.GuiderCalState) + " at binning " + cam.GuiderBinning.ToString());
+            GuidingTestButton.Text = "Guider Stop";
         }
 
         private void SaveLogsButton_Click(object sender, EventArgs e)
@@ -443,6 +441,38 @@ namespace MDL_Guide_Tester
             MainFilterNumber = FilterListBox.SelectedIndex;
         }
 
+        private void MoveStarTestButton_Click(object sender, EventArgs e)
+        {
+            LogIt("\r\n");
+            LogIt("Guider Move Start Location Test");
+            //Open Maxim objects -- camera and application
+            MaxIm.Application app = new MaxIm.Application();
+            MaxIm.CCDCamera cam = new MaxIm.CCDCamera();
+            //Connect Maxim
+            cam.LinkEnabled = BoolToSbyte(true);
+            //Get current star position
+            LogIt("Moving Guider Star location to X=" + (cam.GuiderXStarPosition + (float)DeltaXBox.Value).ToString("0.00") +
+                               " / Y = " + (cam.GuiderYStarPosition + (float)DeltaYBox.Value).ToString("0.00"));
+            sbyte moveResult = BoolToSbyte(false);
+            try
+            {
+                moveResult = cam.GuiderMoveStar(cam.GuiderXStarPosition + (float)DeltaXBox.Value,
+                                                    cam.GuiderYStarPosition + (float)DeltaYBox.Value);
+            }
+            catch ( Exception ex )
+            {
+                LogIt("Move failed: " + ex.Message);
+                moveResult = BoolToSbyte(false);
+            }
+            if (SbyteToBool(moveResult))
+                LogIt("Move Star successful");
+            else
+                LogIt("Move Star failed");
+            GuideStarX.Text = cam.GuiderXStarPosition.ToString();
+            GuideStarY.Text = cam.GuiderYStarPosition.ToString();
+            return;
+        }
+
         private void MainCameraExposureButton_Click(object sender, EventArgs e)
         {
             LogIt("\r\n");
@@ -453,6 +483,7 @@ namespace MDL_Guide_Tester
 
             double duration = (double)MainCameraExposureBox.Value; ; //Exposure length in seconds
             int cameraBinning = GetBinning();
+
 
             //Open Maxim objects -- camera and application
             MaxIm.Application app = new MaxIm.Application();
@@ -477,6 +508,10 @@ namespace MDL_Guide_Tester
                 return;
             }
 
+            //Get guide star position
+            GuideStarX.Text = cam.GuiderXStarPosition.ToString();
+            GuideStarY.Text = cam.GuiderYStarPosition.ToString();
+
             //Take another reading and Wait for calibration to complete
 
             while (!SbyteToBool(cam.ImageReady))
@@ -486,28 +521,6 @@ namespace MDL_Guide_Tester
             }
             //Report exposure result upon completion status, either 2 for successful or 3 for unsuccessful
             LogIt("Main camera exposure done with results: " + cam.CameraStatus.ToString());
-        }
-
-        private void MoveStarTestButton_Click(object sender, EventArgs e)
-        {
-            LogIt("\r\n");
-            LogIt("Guider Move Start Location Test");
-            //Open Maxim objects -- camera and application
-            MaxIm.Application app = new MaxIm.Application();
-            MaxIm.CCDCamera cam = new MaxIm.CCDCamera();
-            //Connect Maxim
-            cam.LinkEnabled = BoolToSbyte(true);
-            //Get current star position
-            LogIt("Moving Guider Star location to X=" + (cam.GuiderXStarPosition + (float)DeltaXBox.Value).ToString("0.00") +
-                                                " / Y = " + (cam.GuiderYStarPosition + (float)DeltaYBox.Value).ToString("0.00"));
-            sbyte moveResult = cam.GuiderMoveStar(cam.GuiderXStarPosition + (float)DeltaXBox.Value, cam.GuiderYStarPosition + (float)DeltaYBox.Value);
-            if (SbyteToBool(moveResult))
-                LogIt("Move Star successful");
-            else
-                LogIt("Move Star failed");
-            GuideStarX.Text = cam.GuiderXStarPosition.ToString();
-            GuideStarY.Text = cam.GuiderYStarPosition.ToString();
-            return;
         }
 
         private void label6_Click(object sender, EventArgs e)
